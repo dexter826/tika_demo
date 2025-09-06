@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Apache Tika Upload Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 min-h-screen flex">
+    <div class="grid grid-cols-2 w-full">
+        <!-- Left side: form -->
+        <div class="bg-white shadow-lg p-8">
+            <h1 class="text-2xl font-bold text-blue-600 mb-4">Apache Tika — Upload Demo</h1>
+            <p class="text-gray-600 mb-6 text-sm">
+                Upload a file and send it to your running <code>tika-server</code>
+                (default <span class="font-mono">http://localhost:9998</span>).
+                Choose an endpoint to extract text, metadata, or both.
+            </p>
+
+            <form id="uploadForm" class="space-y-4">
+                <div>
+                    <label class="block text-gray-700 font-medium mb-1">Endpoint</label>
+                    <select name="endpoint"
+                        class="w-full border border-gray-300 rounded-lg p-2 focus:ring focus:ring-blue-300">
+                        <option value="/tika">/tika — Content</option>
+                        <option value="/meta">/meta — Metadata</option>
+                        <option value="/rmeta">/rmeta — Metadata + Content</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-gray-700 font-medium mb-1">File</label>
+                    <input type="file" name="file" required class="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4
+                   file:rounded-lg file:border-0 file:text-sm file:font-semibold
+                   file:bg-blue-50 file:text-blue-600 hover:file:bg-blue-100" />
+                </div>
+
+                <div class="flex space-x-3">
+                    <button type="submit" id="submitBtn"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg">
+                        Upload & Get Result
+                    </button>
+                    <button type="button" id="clear"
+                        class="bg-gray-400 hover:bg-gray-500 text-white font-semibold px-4 py-2 rounded-lg">
+                        Clear
+                    </button>
+                </div>
+
+                <div id="loading" class="hidden mt-4 text-blue-600 flex items-center space-x-2">
+                    <svg class="animate-spin h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none"
+                        viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                        </circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                    </svg>
+                    <span>Analyzing file...</span>
+                </div>
+            </form>
+        </div>
+
+        <!-- Right side: result -->
+        <div class="bg-gray-50 p-8 border-l border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-700 mb-2">Result</h2>
+            <pre id="result" class="bg-gray-900 text-green-200 p-4 rounded-lg overflow-auto max-h-[600px]">
+No request yet. Start by choosing a file and pressing "Upload & Get Result".
+      </pre>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById("uploadForm");
+        const result = document.getElementById("result");
+        const clearBtn = document.getElementById("clear");
+        const submitBtn = document.getElementById("submitBtn");
+        const loading = document.getElementById("loading");
+
+        clearBtn.addEventListener("click", () => {
+            result.textContent = 'No request yet. Start by choosing a file and pressing "Upload & Get Result".';
+        });
+
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const formData = new FormData(form);
+
+            // Disable button + show loading
+            submitBtn.disabled = true;
+            submitBtn.classList.add("opacity-50", "cursor-not-allowed");
+            loading.classList.remove("hidden");
+
+            try {
+                const resp = await fetch("/upload", { method: "POST", body: formData });
+                const text = await resp.text();
+                result.textContent = text;
+            } catch (err) {
+                result.textContent = "Error: " + err.message;
+            } finally {
+                // Enable button + hide loading
+                submitBtn.disabled = false;
+                submitBtn.classList.remove("opacity-50", "cursor-not-allowed");
+                loading.classList.add("hidden");
+            }
+        });
+    </script>
+</body>
+
+</html>
