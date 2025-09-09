@@ -5,6 +5,11 @@
     <meta charset="utf-8">
     <title>Apache Tika Upload Demo</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Prism.js for syntax highlighting -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-json.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-markup.min.js"></script>
 </head>
 
 <body class="bg-gray-100 min-h-screen flex">
@@ -58,11 +63,34 @@
             <div class="grid grid-cols-2 gap-4">
                 <div>
                     <h3 class="text-sm font-medium text-gray-600 mb-2">Content</h3>
-                    <pre id="contentResult" class="bg-gray-900 text-green-200 p-4 rounded-lg overflow-auto max-h-[600px] whitespace-pre-wrap break-words">No request yet. Upload a file to see content.</pre>
+                    <div class="mb-2 flex space-x-2" id="contentTabs">
+                        <button type="button" class="tab-btn bg-blue-100 text-blue-700 px-2 py-1 rounded" data-mode="raw">Raw</button>
+                        <button type="button" class="tab-btn bg-gray-100 text-gray-700 px-2 py-1 rounded" data-mode="text">Text</button>
+                        <button type="button" class="tab-btn bg-gray-100 text-gray-700 px-2 py-1 rounded" data-mode="rendered">Rendered</button>
+                    </div>
+                    <div id="contentViews">
+                        <pre id="contentRaw" class="bg-gray-900 text-green-200 p-4 rounded-lg overflow-auto max-h-[600px] whitespace-pre-wrap break-words"><code class="language-markup">No request yet. Upload a file to see content.</code></pre>
+                        <pre id="contentText" class="bg-gray-900 text-green-200 p-4 rounded-lg overflow-auto max-h-[600px] whitespace-pre-wrap break-words hidden"><code class="language-none"></code></pre>
+                        <div id="contentRendered" class="rounded-lg overflow-auto max-h-[600px] border border-gray-300 hidden">
+                            <iframe id="contentIframe" sandbox="allow-same-origin" class="w-full h-[400px] bg-white"></iframe>
+                        </div>
+                    </div>
                 </div>
                 <div>
                     <h3 class="text-sm font-medium text-gray-600 mb-2">Metadata</h3>
-                    <pre id="metaResult" class="bg-gray-800 text-yellow-200 p-4 rounded-lg overflow-auto max-h-[600px] whitespace-pre-wrap break-words">No request yet. Upload a file to see metadata.</pre>
+                    <div id="metaContainer" class="bg-gray-800 text-yellow-200 p-4 rounded-lg overflow-auto max-h-[600px]">
+                        <table id="metaTable" class="w-full text-left text-xs">
+                            <thead>
+                                <tr>
+                                    <th class="border-b border-gray-700 pb-1 pr-2">Key</th>
+                                    <th class="border-b border-gray-700 pb-1">Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="2" class="py-2">No request yet. Upload a file to see metadata.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -70,15 +98,31 @@
 
     <script>
         const form = document.getElementById("uploadForm");
-    const contentResult = document.getElementById("contentResult");
-    const metaResult = document.getElementById("metaResult");
+    const contentRaw = document.getElementById("contentRaw");
+    const contentText = document.getElementById("contentText");
+    const contentRendered = document.getElementById("contentRendered");
+    const contentIframe = document.getElementById("contentIframe");
+    const contentTabs = document.getElementById("contentTabs");
+    const metaTable = document.getElementById("metaTable");
         const clearBtn = document.getElementById("clear");
         const submitBtn = document.getElementById("submitBtn");
         const loading = document.getElementById("loading");
 
         clearBtn.addEventListener("click", () => {
-            contentResult.textContent = 'No request yet. Upload a file to see content.';
-            metaResult.textContent = 'No request yet. Upload a file to see metadata.';
+            contentRaw.innerHTML = `<code class="language-markup">No request yet. Upload a file to see content.</code>`;
+            contentText.innerHTML = `<code class="language-none"></code>`;
+            contentRendered.classList.add('hidden');
+            contentRaw.classList.remove('hidden');
+            contentText.classList.add('hidden');
+            metaTable.innerHTML = `<thead>
+                <tr>
+                    <th class='border-b border-gray-700 pb-1 pr-2'>Key</th>
+                    <th class='border-b border-gray-700 pb-1'>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td colspan='2' class='py-2'>No request yet. Upload a file to see metadata.</td></tr>
+            </tbody>`;
         });
 
         form.addEventListener("submit", async (e) => {
@@ -104,12 +148,13 @@
                         // Tìm content (text) và metadata (tất cả keys khác)
                         let content = '';
                         let metadata = {};
+                        let isHtmlContent = false;
+                        let rawContent = '';
+                        let textContent = '';
 
                         if (Array.isArray(obj) && obj.length > 0) {
-                            // Nhiều phần tử: hợp nhất metadata từ phần tử đầu tiên và tìm nội dung
                             const first = obj[0];
                             metadata = {...first};
-                            // Tika có thể để nội dung raw trong key 'X-TIKA:content' hoặc 'content'
                             if (first['X-TIKA:content']) {
                                 content = first['X-TIKA:content'];
                                 delete metadata['X-TIKA:content'];
@@ -117,7 +162,6 @@
                                 content = first['content'];
                                 delete metadata['content'];
                             } else {
-                                // Không tìm thấy content, cố thử ghép tất cả giá trị string
                                 content = '';
                             }
                         } else if (typeof obj === 'object' && obj !== null) {
@@ -130,24 +174,100 @@
                                 delete metadata['content'];
                             }
                         } else {
-                            // Nếu không phải JSON object/array, hiển thị nguyên text ở content
                             content = text;
                             metadata = {};
                         }
 
-                        // Hiển thị
-                        contentResult.textContent = content || '(no extracted content)';
-                        metaResult.textContent = JSON.stringify(metadata, null, 2) || '(no metadata)';
+                        // Kiểm tra nếu content là HTML (bắt đầu bằng <html hoặc <!DOCTYPE)
+                        if (typeof content === 'string' && content.trim().match(/^<(html|!DOCTYPE)/i)) {
+                            isHtmlContent = true;
+                        }
+                        rawContent = content || '(no extracted content)';
+                        // Lấy text từ HTML nếu là HTML
+                        if (isHtmlContent) {
+                            // Tạo element tạm để lấy text
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = content;
+                            textContent = tempDiv.innerText.trim() || '(no extracted text)';
+                        } else {
+                            textContent = content || '(no extracted content)';
+                        }
+
+                        // Hiển thị content ở các chế độ
+                        contentRaw.innerHTML = isHtmlContent
+                            ? `<code class="language-markup">${Prism.highlight(rawContent, Prism.languages.markup, 'markup')}</code>`
+                            : `<code class="language-none">${Prism.util.encode(rawContent)}</code>`;
+                        contentText.innerHTML = `<code class="language-none">${Prism.util.encode(textContent)}</code>`;
+                        if (isHtmlContent) {
+                            contentIframe.srcdoc = rawContent;
+                        } else {
+                            contentIframe.srcdoc = `<pre>${Prism.util.encode(rawContent)}</pre>`;
+                        }
+                        // Mặc định hiển thị Raw
+                        contentRaw.classList.remove('hidden');
+                        contentText.classList.add('hidden');
+                        contentRendered.classList.add('hidden');
+                        // Hiển thị tab Rendered nếu là HTML, ẩn nếu không
+                        contentTabs.querySelector('[data-mode="rendered"]').style.display = isHtmlContent ? '' : 'none';
+
+                        // Hiển thị metadata dưới dạng bảng, highlight giá trị nếu là JSON
+                        let rows = '';
+                        const keys = Object.keys(metadata);
+                        if (keys.length === 0) {
+                            rows = `<tr><td colspan='2' class='py-2'>(no metadata)</td></tr>`;
+                        } else {
+                            for (const key of keys) {
+                                let value = metadata[key];
+                                let valueHtml = '';
+                                if (typeof value === 'object' && value !== null) {
+                                    valueHtml = `<code class='language-json'>${Prism.highlight(JSON.stringify(value, null, 2), Prism.languages.json, 'json')}</code>`;
+                                } else if (typeof value === 'string' && value.trim().startsWith('{')) {
+                                    // Nếu là chuỗi JSON
+                                    try {
+                                        valueHtml = `<code class='language-json'>${Prism.highlight(value, Prism.languages.json, 'json')}</code>`;
+                                    } catch {
+                                        valueHtml = Prism.util.encode(value);
+                                    }
+                                } else {
+                                    valueHtml = Prism.util.encode(value);
+                                }
+                                rows += `<tr><td class='pr-2 align-top font-mono break-words'>${Prism.util.encode(key)}</td><td class='align-top break-words'>${valueHtml}</td></tr>`;
+                            }
+                        }
+                        metaTable.innerHTML = `<thead>
+                            <tr>
+                                <th class='border-b border-gray-700 pb-1 pr-2'>Key</th>
+                                <th class='border-b border-gray-700 pb-1'>Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>`;
 
                     } catch (err) {
                         // Nếu JSON lỗi, hiển thị thô vào content
                         contentResult.textContent = text;
-                        metaResult.textContent = '(could not parse metadata)';
+                        metaTable.innerHTML = `<thead>
+                            <tr>
+                                <th class='border-b border-gray-700 pb-1 pr-2'>Key</th>
+                                <th class='border-b border-gray-700 pb-1'>Value</th>
+                            </tr>
+                        </thead>
+                        <tbody><tr><td colspan='2' class='py-2'>(could not parse metadata)</td></tr></tbody>`;
                     }
                 } else {
                     // Nếu không phải JSON, đặt nội dung nguyên thô
-                    contentResult.textContent = text;
-                    metaResult.textContent = '(no metadata)';
+                    contentRaw.innerHTML = `<code class="language-none">${Prism.util.encode(text)}</code>`;
+                    contentText.innerHTML = `<code class="language-none">${Prism.util.encode(text)}</code>`;
+                    contentRendered.classList.add('hidden');
+                    contentRaw.classList.remove('hidden');
+                    contentText.classList.add('hidden');
+                    contentTabs.querySelector('[data-mode="rendered"]').style.display = 'none';
+                    metaTable.innerHTML = `<thead>
+                        <tr>
+                            <th class='border-b border-gray-700 pb-1 pr-2'>Key</th>
+                            <th class='border-b border-gray-700 pb-1'>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody><tr><td colspan='2' class='py-2'>(no metadata)</td></tr></tbody>`;
                 }
 
             } catch (err) {
@@ -157,6 +277,33 @@
                 submitBtn.disabled = false;
                 submitBtn.classList.remove("opacity-50", "cursor-not-allowed");
                 loading.classList.add("hidden");
+            }
+        });
+
+        // Xử lý chuyển tab content
+        contentTabs.addEventListener('click', (e) => {
+            if (!e.target.classList.contains('tab-btn')) return;
+            const mode = e.target.getAttribute('data-mode');
+            // Đổi style cho tab
+            contentTabs.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-100', 'text-blue-700');
+                btn.classList.add('bg-gray-100', 'text-gray-700');
+            });
+            e.target.classList.add('bg-blue-100', 'text-blue-700');
+            e.target.classList.remove('bg-gray-100', 'text-gray-700');
+            // Hiển thị đúng view
+            if (mode === 'raw') {
+                contentRaw.classList.remove('hidden');
+                contentText.classList.add('hidden');
+                contentRendered.classList.add('hidden');
+            } else if (mode === 'text') {
+                contentRaw.classList.add('hidden');
+                contentText.classList.remove('hidden');
+                contentRendered.classList.add('hidden');
+            } else if (mode === 'rendered') {
+                contentRaw.classList.add('hidden');
+                contentText.classList.add('hidden');
+                contentRendered.classList.remove('hidden');
             }
         });
     </script>
