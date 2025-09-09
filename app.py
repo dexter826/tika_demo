@@ -16,14 +16,15 @@ def upload_file():
         return jsonify({"error": "No file uploaded"}), 400
 
     file = request.files["file"]
-    endpoint = request.form.get("endpoint", "/tika")
+    # Luôn sử dụng /rmeta để trả về cả metadata và content trong JSON
+    endpoint = "/rmeta"
     url = TIKA_URL.rstrip("/") + endpoint
 
-    headers = {"Accept": "application/json"} if endpoint in ["/meta", "/rmeta"] else {"Accept": "text/plain"}
+    headers = {"Accept": "application/json"}
 
     resp = requests.put(url, data=file.stream, headers=headers)
 
-    return resp.text, resp.status_code, {"Content-Type": resp.headers.get("Content-Type", "text/plain")}
+    return resp.text, resp.status_code, {"Content-Type": resp.headers.get("Content-Type", "application/json")}
 
 if __name__ == "__main__":
     app.run(debug=True)
