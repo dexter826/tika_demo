@@ -16,7 +16,7 @@ def upload_file():
         return jsonify({"error": "No file uploaded"}), 400
 
     file = request.files["file"]
-    # Luôn sử dụng /rmeta để trả về cả metadata và content trong JSON
+    # Sử dụng /rmeta để trả về cả metadata và content trong JSON
     endpoint = "/rmeta"
     url = TIKA_URL.rstrip("/") + endpoint
 

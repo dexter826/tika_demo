@@ -11,7 +11,6 @@
    ```
 3. **Tải Tika server**
    - Tải file [`tika-server-standard-3.2.2.jar`](https://dlcdn.apache.org/tika/3.2.2/tika-server-standard-3.2.2.jar)
-   - Đặt vào cùng thư mục với `app.py`
 4. **Chạy Tika server**
    ```bash
    java -jar tika-server-standard-3.2.2.jar
